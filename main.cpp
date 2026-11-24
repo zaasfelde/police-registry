@@ -4,6 +4,7 @@
 #include <QDebug>
 
 #include "DatabaseManager.h"
+#include "ReferenceData.h"
 
 int main(int argc, char *argv[])
 {
@@ -17,7 +18,10 @@ int main(int argc, char *argv[])
     QQmlApplicationEngine engine;
 
     DatabaseManager dbManager;
+    ReferenceData referenceData;
+
     engine.rootContext()->setContextProperty(QStringLiteral("dbManager"), &dbManager);
+    engine.rootContext()->setContextProperty(QStringLiteral("refData"), &referenceData);
 
     QObject::connect(
         &engine,

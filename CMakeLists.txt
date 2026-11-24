@@ -31,6 +31,14 @@ qt_add_qml_module(apppolicedep
     SOURCES
         src/DatabaseManager.h
         src/DatabaseManager.cpp
+        src/ReferenceData.h
+        src/ReferenceData.cpp
+        src/TotpAuth.h
+        src/TotpAuth.cpp
+        src/QrCodeItem.h
+        src/QrCodeItem.cpp
+        src/third_party/qrcodegen.hpp
+        src/third_party/qrcodegen.cpp
 )
 
 set_target_properties(apppolicedep PROPERTIES
@@ -49,6 +57,22 @@ target_include_directories(apppolicedep PRIVATE src)
 target_link_libraries(apppolicedep
     PRIVATE Qt6::Quick Qt6::Qml Qt6::Core Qt6::Gui Qt6::Sql Qt6::Network
 )
+
+# Консольный прогон проверок логики (без QML): apppolicedep_selftest
+add_executable(policedep_selftest
+    src/SelfTestMain.cpp
+    src/SelfTest.h
+    src/SelfTest.cpp
+    src/DatabaseManager.h
+    src/DatabaseManager.cpp
+    src/ReferenceData.h
+    src/ReferenceData.cpp
+    src/TotpAuth.h
+    src/TotpAuth.cpp
+)
+target_include_directories(policedep_selftest PRIVATE src)
+target_link_libraries(policedep_selftest PRIVATE Qt6::Core Qt6::Gui Qt6::Sql Qt6::Network)
+set_target_properties(policedep_selftest PROPERTIES WIN32_EXECUTABLE FALSE)
 
 include(GNUInstallDirs)
 install(TARGETS apppolicedep
