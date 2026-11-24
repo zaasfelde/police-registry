@@ -13,11 +13,9 @@
 #include <QPasswordDigestor>
 #include <QRandomGenerator>
 #include <QRegularExpression>
-#include <QSqlRecord>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QVector>
-#include <algorithm>
 #include <cstring>
 
 namespace {
@@ -1217,6 +1215,8 @@ QVariantMap DatabaseManager::createOfficer(const QVariantMap &data)
     const QString hireDate = normalizeDate(mapString(data, "hire_date"), &hireOk);
     if (!hireOk)
         return errorResult(QStringLiteral("Некорректная дата приёма на службу"));
+    if (!hireDate.isEmpty() && hireDate > QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd")))
+        return errorResult(QStringLiteral("Дата приёма не может быть в будущем"));
 
     const QString personnelNumber = mapString(data, "personnel_number");
     if (!personnelNumber.isEmpty()) {
@@ -1446,10 +1446,14 @@ QVariantMap DatabaseManager::updateOfficer(const QVariantMap &data)
     const QString birthDate = normalizeDate(mapString(existing, "birth_date"), &birthOk);
     if (!birthOk)
         return errorResult(QStringLiteral("Некорректная дата рождения"));
+    if (!birthDate.isEmpty() && (yearsSince(birthDate) < 18 || yearsSince(birthDate) > 75))
+        return errorResult(QStringLiteral("Проверьте дату рождения сотрудника"));
     bool hireOk = false;
     const QString hireDate = normalizeDate(mapString(existing, "hire_date"), &hireOk);
     if (!hireOk)
         return errorResult(QStringLiteral("Некорректная дата приёма на службу"));
+    if (!hireDate.isEmpty() && hireDate > QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd")))
+        return errorResult(QStringLiteral("Дата приёма не может быть в будущем"));
 
     const QString personnelNumber = mapString(existing, "personnel_number");
     if (!personnelNumber.isEmpty()) {
@@ -1769,6 +1773,13 @@ QVariantMap DatabaseManager::updatePerson(const QVariantMap &data)
         return errorResult(QStringLiteral("Выберите статус личности"));
 
     int caseId = merged.value(QStringLiteral("case_id")).toInt();
+    if (caseId > 0) {
+        QSqlQuery check(m_database);
+        check.prepare(QStringLiteral("SELECT COUNT(*) FROM cases WHERE case_id = :id"));
+        check.bindValue(QStringLiteral(":id"), caseId);
+        if (!check.exec() || !check.next() || check.value(0).toInt() == 0)
+            return errorResult(QStringLiteral("Уголовное дело не найдено"));
+    }
 
     QSqlQuery update(m_database);
     update.prepare(QStringLiteral(
@@ -1920,6 +1931,8 @@ QVariantMap DatabaseManager::createCase(const QVariantMap &data)
         return errorResult(QStringLiteral("Некорректная дата возбуждения дела"));
     if (dateOpened.isEmpty())
         dateOpened = QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd"));
+    if (dateOpened > QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd")))
+        return errorResult(QStringLiteral("Дата возбуждения не может быть в будущем"));
 
     bool closedOk = false;
     QString dateClosed = normalizeDate(mapString(data, "date_closed", "dateClosed"), &closedOk);
@@ -1999,6 +2012,8 @@ QVariantMap DatabaseManager::updateCase(const QVariantMap &data)
     const QString dateOpened = normalizeDate(mapString(merged, "date_opened"), &openedOk);
     if (!openedOk || dateOpened.isEmpty())
         return errorResult(QStringLiteral("Некорректная дата возбуждения дела"));
+    if (dateOpened > QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd")))
+        return errorResult(QStringLiteral("Дата возбуждения не может быть в будущем"));
 
     bool closedOk = false;
     QString dateClosed = normalizeDate(mapString(merged, "date_closed"), &closedOk);
@@ -2183,6 +2198,14 @@ QVariantMap DatabaseManager::createEvidence(const QVariantMap &data)
             caseId = caseQuery.value(0).toInt();
     }
 
+    if (caseId > 0) {
+        QSqlQuery caseQuery(m_database);
+        caseQuery.prepare(QStringLiteral("SELECT COUNT(*) FROM cases WHERE case_id = :id"));
+        caseQuery.bindValue(QStringLiteral(":id"), caseId);
+        if (!caseQuery.exec() || !caseQuery.next() || caseQuery.value(0).toInt() == 0)
+            return errorResult(QStringLiteral("Уголовное дело не найдено"));
+    }
+
     const QString timestamp = nowIso();
     QSqlQuery insert(m_database);
     insert.prepare(QStringLiteral(
@@ -2239,6 +2262,13 @@ QVariantMap DatabaseManager::updateEvidence(const QVariantMap &data)
         return errorResult(QStringLiteral("Некорректная дата регистрации"));
 
     int caseId = merged.value(QStringLiteral("case_id")).toInt();
+    if (caseId > 0) {
+        QSqlQuery check(m_database);
+        check.prepare(QStringLiteral("SELECT COUNT(*) FROM cases WHERE case_id = :id"));
+        check.bindValue(QStringLiteral(":id"), caseId);
+        if (!check.exec() || !check.next() || check.value(0).toInt() == 0)
+            return errorResult(QStringLiteral("Уголовное дело не найдено"));
+    }
 
     QSqlQuery update(m_database);
     update.prepare(QStringLiteral(
@@ -2622,123 +2652,4 @@ QVariantMap DatabaseManager::searchAll(const QString &queryText)
 
     result[QStringLiteral("total")] = officers.size() + persons.size() + cases.size() + evidence.size();
     return result;
-}
-
-// ---------------------------------------------------------------------------
-// Совместимость со старыми экранами
-// ---------------------------------------------------------------------------
-
-bool DatabaseManager::registerOfficer(const QVariantMap &officerData)
-{
-    QVariantMap data = officerData;
-    data[QStringLiteral("last_name")] = mapString(officerData, "surname");
-    data[QStringLiteral("name")] = mapString(officerData, "name");
-    const QVariantMap result = createOfficer(data);
-    if (!result.value(QStringLiteral("ok")).toBool())
-        return false;
-
-    if (result.value(QStringLiteral("requiresApproval")).toBool()) {
-        QSqlQuery update(m_database);
-        update.prepare(QStringLiteral("UPDATE officers SET is_approved = 1 WHERE officer_id = :id"));
-        update.bindValue(QStringLiteral(":id"), result.value(QStringLiteral("id")).toInt());
-        update.exec();
-    }
-    return true;
-}
-
-bool DatabaseManager::verifyLogin(const QString &login, const QString &password)
-{
-    const QVariantMap result = authenticate(login, password);
-    if (result.value(QStringLiteral("requires2fa")).toBool()) {
-        cancelTwoFactor();
-        return false;
-    }
-    return result.value(QStringLiteral("ok")).toBool();
-}
-
-bool DatabaseManager::isLoginExists(const QString &login)
-{
-    return !isLoginFree(login);
-}
-
-QVariantList DatabaseManager::getAllOfficers()
-{
-    QVariantList officers = getOfficers();
-    for (QVariant &value : officers) {
-        QVariantMap officer = value.toMap();
-        officer[QStringLiteral("photo_path")] = officer.value(QStringLiteral("photo_url"));
-        value = officer;
-    }
-    return officers;
-}
-
-bool DatabaseManager::deleteOfficer(int officerId)
-{
-    return removeOfficer(officerId).value(QStringLiteral("ok")).toBool();
-}
-
-bool DatabaseManager::addPerson(const QVariantMap &personData)
-{
-    QVariantMap data = personData;
-    data[QStringLiteral("last_name")] = mapString(personData, "surname");
-    data[QStringLiteral("name")] = mapString(personData, "name");
-    data[QStringLiteral("birth_date")] = mapString(personData, "birthDate");
-    data[QStringLiteral("case_number")] = mapString(personData, "caseNumber");
-    return createPerson(data).value(QStringLiteral("ok")).toBool();
-}
-
-QVariantList DatabaseManager::getAllPersons()
-{
-    return getPersons();
-}
-
-bool DatabaseManager::deletePerson(int personId)
-{
-    return removePerson(personId).value(QStringLiteral("ok")).toBool();
-}
-
-bool DatabaseManager::addCase(const QVariantMap &caseData)
-{
-    return createCase(caseData).value(QStringLiteral("ok")).toBool();
-}
-
-QVariantList DatabaseManager::getAllCases()
-{
-    return getCases();
-}
-
-bool DatabaseManager::deleteCase(int caseId)
-{
-    return removeCase(caseId, false).value(QStringLiteral("ok")).toBool();
-}
-
-bool DatabaseManager::addEvidence(const QVariantMap &evidenceData)
-{
-    return createEvidence(evidenceData).value(QStringLiteral("ok")).toBool();
-}
-
-QVariantList DatabaseManager::getAllEvidence()
-{
-    return getEvidence();
-}
-
-bool DatabaseManager::deleteEvidence(int evidenceId)
-{
-    return removeEvidence(evidenceId).value(QStringLiteral("ok")).toBool();
-}
-
-bool DatabaseManager::updateEmployeePhoto(int officerId, const QString &photoPath)
-{
-    return setOfficerPhoto(officerId, QUrl(photoPath)).value(QStringLiteral("ok")).toBool();
-}
-
-bool DatabaseManager::removeEmployeePhoto(int officerId)
-{
-    return removeOfficerPhoto(officerId).value(QStringLiteral("ok")).toBool();
-}
-
-QString DatabaseManager::getEmployeePhoto(int officerId)
-{
-    const QVariantMap officer = userMap(officerId);
-    return officer.value(QStringLiteral("photo_url")).toString();
 }

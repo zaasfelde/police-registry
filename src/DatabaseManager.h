@@ -89,26 +89,7 @@ public:
     Q_INVOKABLE QVariantMap getDashboardStats();
     Q_INVOKABLE QVariantMap searchAll(const QString &query);
 
-    // ---------- Устаревший API (используется старыми экранами) ----------
-    Q_INVOKABLE bool registerOfficer(const QVariantMap &officerData);
-    Q_INVOKABLE bool verifyLogin(const QString &login, const QString &password);
-    Q_INVOKABLE bool isLoginExists(const QString &login);
-    Q_INVOKABLE QVariantList getAllOfficers();
-    Q_INVOKABLE bool deleteOfficer(int officerId);
-    Q_INVOKABLE bool addPerson(const QVariantMap &personData);
-    Q_INVOKABLE QVariantList getAllPersons();
-    Q_INVOKABLE bool deletePerson(int personId);
-    Q_INVOKABLE bool addCase(const QVariantMap &caseData);
-    Q_INVOKABLE QVariantList getAllCases();
-    Q_INVOKABLE bool deleteCase(int caseId);
-    Q_INVOKABLE bool addEvidence(const QVariantMap &evidenceData);
-    Q_INVOKABLE QVariantList getAllEvidence();
-    Q_INVOKABLE bool deleteEvidence(int evidenceId);
-    Q_INVOKABLE bool updateEmployeePhoto(int officerId, const QString &photoPath);
-    Q_INVOKABLE bool removeEmployeePhoto(int officerId);
-    Q_INVOKABLE QString getEmployeePhoto(int officerId);
-
-private:
+    private:
     bool initDatabase();
     bool createTables();
     bool migrateSchema();

@@ -39,7 +39,6 @@ qt_add_qml_module(apppolicedep
         qml/components/GlobalSearch.qml
         qml/components/InfoRow.qml
         qml/components/MiniCalendar.qml
-        qml/components/PageHeader.qml
         qml/components/PasswordStrength.qml
         qml/components/PhotoPicker.qml
         qml/components/QrPanel.qml
@@ -47,23 +46,16 @@ qt_add_qml_module(apppolicedep
         qml/components/SearchField.qml
         qml/components/StatCard.qml
         qml/components/ToastHost.qml
-        qml/pages/AddCaseForm.qml
-        qml/pages/AddEvidenceForm.qml
-        qml/pages/AddPersonForm.qml
         qml/pages/CaseDialog.qml
-        qml/pages/CaseListForm.qml
         qml/pages/CasesPage.qml
         qml/pages/DashboardPage.qml
-        qml/pages/EmployeeDetailsForm.qml
         qml/pages/EmployeeDialog.qml
-        qml/pages/EmployeeListForm.qml
         qml/pages/EmployeesPage.qml
         qml/pages/EvidenceDialog.qml
         qml/pages/EvidencePage.qml
         qml/pages/LoginForm.qml
         qml/pages/MainApp.qml
         qml/pages/PersonDialog.qml
-        qml/pages/PersonListForm.qml
         qml/pages/PersonsPage.qml
         qml/pages/ProfilePage.qml
         qml/pages/RegistrationForm.qml
