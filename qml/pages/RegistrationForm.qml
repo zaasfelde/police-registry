@@ -1,837 +1,568 @@
 import QtQuick
-import QtQuick.Controls 2.15
-import QtQuick.Layouts 2.15
+import QtQuick.Controls
+import QtQuick.Layouts
+import policedep
 
+/*
+ * Регистрация сотрудника: личные данные, служба и учётная запись.
+ * Первый зарегистрированный пользователь становится администратором,
+ * остальные ожидают подтверждения.
+ */
 Rectangle {
-    id: registrationForm
+    id: page
+
     anchors.fill: parent
-    color: "#E0E4E9"
+    color: Theme.bg
 
     signal loginRequested()
     signal registrationSuccessful()
 
-    property color colorBackground: "#c6cdd7"
-    property color colorPrimary: "#001e38"
-    property color colorSecondary: "#112F49"
-    property color colorAccent: "#BAC1CC"
-    property color colorHover: "#557FA3"
-    property color colorPressed: "#375D7F"
-    property color colorTextLight: "#BAC1CC"
-    property color colorTextDark: "#2c3e50"
-    property color colorSrchButton: "#112F49"
+    property bool firstUser: false
+    property bool busy: false
+    property string pendingPhotoUrl: ""
+    property string summaryError: ""
 
-    // Выпадающий список для званий (на уровне корня)
-    Rectangle {
-        id: rankDropdown
-        width: rankComboBox.width
-        height: Math.min(300, rankComboBox.model.length * 45)
-        color: "white"
-        border.color: "#7d98ab"
-        border.width: 1
-        radius: 8
-        visible: false
-        z: 1000 // Высокий z-index для перекрытия всех элементов
+    property string lastNameError: ""
+    property string firstNameError: ""
+    property string birthError: ""
+    property string phoneError: ""
+    property string emailError: ""
+    property string rankError: ""
+    property string positionError: ""
+    property string loginError: ""
+    property string passwordError: ""
+    property string confirmError: ""
 
-        property point targetPosition: Qt.point(0, 0)
+    property var rankModel: ["Выберите звание"]
+    property var positionModel: ["Выберите должность"]
 
-        x: targetPosition.x
-        y: targetPosition.y + rankComboBox.height + 2
-
-        ScrollView {
-            anchors.fill: parent
-            clip: true
-
-            Column {
-                width: parent.width
-                spacing: 1
-
-                Repeater {
-                    model: rankComboBox.model
-
-                    Rectangle {
-                        width: rankDropdown.width
-                        height: 45
-                        color: rankDropdownItemMa.containsMouse ? colorHover : "white"
-
-                        Text {
-                            anchors {
-                                left: parent.left
-                                leftMargin: 12
-                                right: parent.right
-                                rightMargin: 12
-                                verticalCenter: parent.verticalCenter
-                            }
-                            text: modelData
-                            color: rankDropdownItemMa.containsMouse ? colorTextLight : colorTextDark
-                            font.pixelSize: 14
-                            elide: Text.ElideRight
-                        }
-
-                        MouseArea {
-                            id: rankDropdownItemMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: {
-                                rankComboBox.currentIndex = index
-                                rankComboBox.currentText = modelData
-                                rankDropdown.visible = false
-                            }
-                            cursorShape: Qt.PointingHandCursor
-                        }
-                    }
-                }
-            }
-        }
+    Component.onCompleted: {
+        firstUser = !dbManager.hasUsers()
+        positionModel = ["Выберите должность"].concat(refData.positions())
+        updateRankModel()
+        lastNameField.forceActiveFocus()
     }
 
-    // Выпадающий список для должностей (на уровне корня)
-    Rectangle {
-        id: positionDropdown
-        width: positionComboBox.width
-        height: Math.min(250, positionComboBox.model.length * 45)
-        color: "white"
-        border.color: "#7d98ab"
-        border.width: 1
-        radius: 8
-        visible: false
-        z: 1000 // Высокий z-index для перекрытия всех элементов
+    function updateRankModel() {
+        rankModel = ["Выберите звание"].concat(refData.ranks(categoryCombo.currentText))
+        rankCombo.currentIndex = 0
+    }
 
-        property point targetPosition: Qt.point(0, 0)
+    function clearErrors() {
+        lastNameError = ""
+        firstNameError = ""
+        birthError = ""
+        phoneError = ""
+        emailError = ""
+        rankError = ""
+        positionError = ""
+        loginError = ""
+        passwordError = ""
+        confirmError = ""
+        summaryError = ""
+    }
 
-        x: targetPosition.x
-        y: targetPosition.y + positionComboBox.height + 2
+    function ageFromIso(iso) {
+        if (!iso)
+            return -1
+        var birth = new Date(iso + "T00:00:00")
+        if (isNaN(birth.getTime()))
+            return -1
+        var today = new Date()
+        var age = today.getFullYear() - birth.getFullYear()
+        if (today.getMonth() < birth.getMonth()
+                || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate()))
+            age--
+        return age
+    }
 
-        ScrollView {
-            anchors.fill: parent
-            clip: true
-
-            Column {
-                width: parent.width
-                spacing: 1
-
-                Repeater {
-                    model: positionComboBox.model
-
-                    Rectangle {
-                        width: positionDropdown.width
-                        height: 45
-                        color: positionDropdownItemMa.containsMouse ? colorHover : "white"
-
-                        Text {
-                            anchors {
-                                left: parent.left
-                                leftMargin: 12
-                                right: parent.right
-                                rightMargin: 12
-                                verticalCenter: parent.verticalCenter
-                            }
-                            text: modelData
-                            color: positionDropdownItemMa.containsMouse ? colorTextLight : colorTextDark
-                            font.pixelSize: 14
-                            elide: Text.ElideRight
-                        }
-
-                        MouseArea {
-                            id: positionDropdownItemMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: {
-                                positionComboBox.currentIndex = index
-                                positionComboBox.currentText = modelData
-                                positionDropdown.visible = false
-                            }
-                            cursorShape: Qt.PointingHandCursor
-                        }
-                    }
-                }
-            }
+    function checkLoginAvailable() {
+        var login = loginField.text.trim()
+        if (login.length < 4) {
+            loginError = ""
+            return
         }
+        loginError = dbManager.isLoginFree(login) ? "" : "Этот логин уже занят"
+    }
+
+    function validate() {
+        clearErrors()
+        var ok = true
+
+        if (lastNameField.text.trim().length < 2) {
+            lastNameError = "Укажите фамилию"
+            ok = false
+        }
+        if (firstNameField.text.trim().length < 2) {
+            firstNameError = "Укажите имя"
+            ok = false
+        }
+
+        var birth = birthDateField.value
+        if (birth && (ageFromIso(birth) < 18 || ageFromIso(birth) > 75)) {
+            birthError = "Сотрудник должен быть старше 18 лет"
+            ok = false
+        }
+
+        var phone = phoneField.text.trim()
+        if (phone !== "" && phone.replace(/\D/g, "").length < 10) {
+            phoneError = "Проверьте номер телефона"
+            ok = false
+        }
+
+        var email = emailField.text.trim()
+        if (email !== "" && !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) {
+            emailError = "Проверьте адрес электронной почты"
+            ok = false
+        }
+
+        if (categoryCombo.currentIndex < 0) {
+            rankError = "Выберите категорию звания"
+            ok = false
+        }
+        if (rankCombo.currentIndex <= 0) {
+            rankError = "Выберите специальное звание"
+            ok = false
+        }
+        if (positionCombo.currentIndex <= 0) {
+            positionError = "Выберите должность"
+            ok = false
+        }
+
+        var login = loginField.text.trim()
+        if (!/^[A-Za-z0-9][A-Za-z0-9._-]{3,31}$/.test(login)) {
+            loginError = "4–32 символа: латинские буквы, цифры, «.», «_», «-»"
+            ok = false
+        } else if (!dbManager.isLoginFree(login)) {
+            loginError = "Этот логин уже занят"
+            ok = false
+        }
+
+        var password = passwordField.text
+        if (password.length < 8) {
+            passwordError = "Не менее 8 символов"
+            ok = false
+        } else if (!/[A-Za-zА-Яа-яЁё]/.test(password) || !/[0-9]/.test(password)) {
+            passwordError = "Пароль должен содержать букву и цифру"
+            ok = false
+        }
+
+        if (confirmField.text !== password) {
+            confirmError = "Пароли не совпадают"
+            ok = false
+        }
+
+        if (!ok)
+            summaryError = "Проверьте выделенные поля"
+        return ok
+    }
+
+    function submit() {
+        if (page.busy || !validate())
+            return
+
+        page.busy = true
+        var data = {
+            last_name: lastNameField.text.trim(),
+            name: firstNameField.text.trim(),
+            patronymic: patronymicField.text.trim(),
+            birth_date: birthDateField.value,
+            phone: phoneField.text.trim(),
+            email: emailField.text.trim(),
+            rank_category: categoryCombo.currentText,
+            rank: rankCombo.currentText,
+            position: positionCombo.currentText,
+            personnel_number: personnelField.text.trim(),
+            hire_date: hireDateField.value,
+            experience: parseInt(experienceField.text) || 0,
+            login: loginField.text.trim().toLowerCase(),
+            password: passwordField.text,
+            photo_url: page.pendingPhotoUrl
+        }
+
+        var result = dbManager.createOfficer(data)
+        page.busy = false
+
+        if (result.ok) {
+            App.notify(result.isAdmin
+                       ? "Аккаунт администратора создан. Войдите в систему."
+                       : "Заявка отправлена. Администратор должен подтвердить учётную запись.",
+                       "success")
+            page.registrationSuccessful()
+            return
+        }
+
+        page.summaryError = result.error || "Не удалось зарегистрироваться"
+        if (page.summaryError.indexOf("логин") !== -1)
+            page.loginError = page.summaryError
     }
 
     ScrollView {
+        id: scroll
         anchors.fill: parent
+        contentWidth: availableWidth
         clip: true
 
-        // Основной контейнер, который будет центрирован
-        Rectangle {
-            width: Math.min(600, parent.width * 0.8)
-            height: contentLayout.height + 40 // + отступы
-            color: "transparent"
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.top
-            anchors.topMargin: 20
+        Item {
+            width: scroll.availableWidth
+            height: contentColumn.implicitHeight + 48
 
             ColumnLayout {
-                id: contentLayout
-                width: parent.width
-                spacing: 20
+                id: contentColumn
+                width: Math.min(960, parent.width - 48)
+                anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top: parent.top
+                anchors.topMargin: 24
+                spacing: 16
 
-                Text {
-                    text: "👤 Регистрация сотрудника"
-                    font.pixelSize: 28
-                    font.bold: true
-                    color: colorTextDark
-                    Layout.alignment: Qt.AlignHCenter
-                }
-
-                // Основные поля ввода
-                // Фамилия
-                ColumnLayout {
-                    spacing: 5
+                RowLayout {
                     Layout.fillWidth: true
+                    spacing: 12
 
-                    Text {
-                        text: "Фамилия:*"
-                        color: colorTextDark
-                        font.pixelSize: 16
-                        font.bold: true
+                    AppButton {
+                        text: "← Назад"
+                        variant: "ghost"
+                        onClicked: page.loginRequested()
                     }
 
-                    Rectangle {
+                    Column {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 45
-                        radius: 8
-                        border.color: "#7d98ab"
-                        border.width: 1
-                        color: "white"
+                        spacing: 2
 
-                        TextInput {
-                            id: lastNameField
-                            anchors {
-                                fill: parent
-                                margins: 12
-                            }
-                            font.pixelSize: 16
-                            color: colorTextDark
-                            verticalAlignment: TextInput.AlignVCenter
-
-                            Text {
-                                text: "Введите фамилию"
-                                color: "#7f8c8d"
-                                font: parent.font
-                                visible: !parent.text && !parent.activeFocus
-                            }
+                        Text {
+                            text: "Регистрация сотрудника"
+                            color: Theme.text
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontHeading
+                            font.bold: true
                         }
-                    }
 
-                    // Имя
-                    Text {
-                        text: "Имя:*"
-                        color: colorTextDark
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 45
-                        radius: 8
-                        border.color: "#7d98ab"
-                        border.width: 1
-                        color: "white"
-
-                        TextInput {
-                            id: firstNameField
-                            anchors {
-                                fill: parent
-                                margins: 12
-                            }
-                            font.pixelSize: 16
-                            color: colorTextDark
-                            verticalAlignment: TextInput.AlignVCenter
-
-                            Text {
-                                text: "Введите имя"
-                                color: "#7f8c8d"
-                                font: parent.font
-                                visible: !parent.text && !parent.activeFocus
-                            }
-                        }
-                    }
-
-                    // Отчество
-                    Text {
-                        text: "Отчество:"
-                        color: colorTextDark
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 45
-                        radius: 8
-                        border.color: "#7d98ab"
-                        border.width: 1
-                        color: "white"
-
-                        TextInput {
-                            id: patronymicField
-                            anchors {
-                                fill: parent
-                                margins: 12
-                            }
-                            font.pixelSize: 16
-                            color: colorTextDark
-                            verticalAlignment: TextInput.AlignVCenter
-
-                            Text {
-                                text: "Введите отчество"
-                                color: "#7f8c8d"
-                                font: parent.font
-                                visible: !parent.text && !parent.activeFocus
-                            }
-                        }
-                    }
-
-                    // Дата рождения
-                    Text {
-                        text: "Дата рождения:"
-                        color: colorTextDark
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 45
-                        radius: 8
-                        border.color: "#7d98ab"
-                        border.width: 1
-                        color: "white"
-
-                        TextInput {
-                            id: birthDateField
-                            anchors {
-                                fill: parent
-                                margins: 12
-                            }
-                            font.pixelSize: 16
-                            color: colorTextDark
-                            verticalAlignment: TextInput.AlignVCenter
-
-                            Text {
-                                text: "Введите дату рождения"
-                                color: "#7f8c8d"
-                                font: parent.font
-                                visible: !parent.text && !parent.activeFocus
-                            }
-                        }
-                    }
-
-                    // Стаж
-                    Text {
-                        text: "Стаж в годах:"
-                        color: colorTextDark
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 45
-                        radius: 8
-                        border.color: "#7d98ab"
-                        border.width: 1
-                        color: "white"
-
-                        TextInput {
-                            id: expField
-                            anchors {
-                                fill: parent
-                                margins: 12
-                            }
-                            font.pixelSize: 16
-                            color: colorTextDark
-                            verticalAlignment: TextInput.AlignVCenter
-
-                            Text {
-                                text: "Укажите стаж в годах"
-                                color: "#7f8c8d"
-                                font: parent.font
-                                visible: !parent.text && !parent.activeFocus
-                            }
-                        }
-                    }
-
-                    // Табельный номер
-                    Text {
-                        text: "Табельный номер:"
-                        color: colorTextDark
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 45
-                        radius: 8
-                        border.color: "#7d98ab"
-                        border.width: 1
-                        color: "white"
-
-                        TextInput {
-                            id: numberField
-                            anchors {
-                                fill: parent
-                                margins: 12
-                            }
-                            font.pixelSize: 16
-                            color: colorTextDark
-                            verticalAlignment: TextInput.AlignVCenter
-
-                            Text {
-                                text: "Табельный номер"
-                                color: "#7f8c8d"
-                                font: parent.font
-                                visible: !parent.text && !parent.activeFocus
-                            }
-                        }
-                    }
-
-                    // Логин
-                    Text {
-                        text: "Логин:*"
-                        color: colorTextDark
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 45
-                        radius: 8
-                        border.color: "#7d98ab"
-                        border.width: 1
-                        color: "white"
-
-                        TextInput {
-                            id: loginField
-                            anchors {
-                                fill: parent
-                                margins: 12
-                            }
-                            font.pixelSize: 16
-                            color: colorTextDark
-                            verticalAlignment: TextInput.AlignVCenter
-
-                            Text {
-                                text: "Придумайте логин"
-                                color: "#7f8c8d"
-                                font: parent.font
-                                visible: !parent.text && !parent.activeFocus
-                            }
-                        }
-                    }
-
-                    // Пароль
-                    Text {
-                        text: "Пароль:*"
-                        color: colorTextDark
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 45
-                        radius: 8
-                        border.color: "#7d98ab"
-                        border.width: 1
-                        color: "white"
-
-                        TextInput {
-                            id: passwordField
-                            anchors {
-                                fill: parent
-                                margins: 12
-                            }
-                            font.pixelSize: 16
-                            color: colorTextDark
-                            echoMode: TextInput.Password
-                            verticalAlignment: TextInput.AlignVCenter
-
-                            Text {
-                                text: "Придумайте пароль"
-                                color: "#7f8c8d"
-                                font: parent.font
-                                visible: !parent.text && !parent.activeFocus
-                            }
-                        }
-                    }
-                    // Подтверждение пароля
-                    Text {
-                        text: "Повторите пароль:*"
-                        color: colorTextDark
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 45
-                        radius: 8
-                        border.color: "#7d98ab"
-                        border.width: 1
-                        color: "white"
-
-                        TextInput {
-                            id: confirmPasswordField
-                            anchors {
-                                fill: parent
-                                margins: 12
-                            }
-                            font.pixelSize: 16
-                            color: colorTextDark
-                            echoMode: TextInput.Password
-                            verticalAlignment: TextInput.AlignVCenter
-
-                            Text {
-                                text: "Повторите пароль"
-                                color: "#7f8c8d"
-                                font: parent.font
-                                visible: !parent.text && !parent.activeFocus
-                            }
+                        Text {
+                            text: "Заполните личные и служебные данные. Логин и пароль понадобятся для входа."
+                            color: Theme.textMuted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSmall
+                            elide: Text.ElideRight
+                            width: parent.width
                         }
                     }
                 }
 
-                // Звание и должность на одной строке
-                ColumnLayout {
+                Rectangle {
                     Layout.fillWidth: true
-                    spacing: 10
+                    implicitHeight: noticeText.implicitHeight + 24
+                    radius: Theme.radiusSm
+                    color: page.firstUser ? Theme.infoBg : Theme.warningBg
+                    border.color: page.firstUser ? "#C9DCF8" : "#EED9AE"
+                    border.width: 1
 
-                    Text {
-                        text: "Служебная информация"
-                        color: colorTextDark
-                        font.pixelSize: 18
-                        font.bold: true
-                        Layout.alignment: Qt.AlignHCenter
+                    Row {
+                        anchors.fill: parent
+                        anchors.margins: 12
+                        spacing: 10
+
+                        Text {
+                            text: page.firstUser ? "🛡" : "⏳"
+                            font.pixelSize: 18
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            id: noticeText
+                            width: parent.width - 34
+                            text: page.firstUser
+                                  ? "Это первый аккаунт в системе — он получит права администратора и сможет подтверждать остальных сотрудников."
+                                  : "После регистрации учётная запись будет ожидать подтверждения администратором. Войти можно будет только после подтверждения."
+                            color: page.firstUser ? Theme.info : Theme.warning
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSmall
+                            wrapMode: Text.WordWrap
+                        }
                     }
+                }
+
+                Card {
+                    Layout.fillWidth: true
+                    title: "Личные данные"
+                    icon: "👤"
 
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 20
+                        spacing: 18
 
-                        // Звание
                         ColumnLayout {
-                            spacing: 5
                             Layout.fillWidth: true
+                            spacing: 12
 
-                            Text {
-                                text: "Звание:"
-                                color: colorTextDark
-                                font.pixelSize: 14
-                                font.bold: true
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 12
+
+                                AppTextField {
+                                    id: lastNameField
+                                    Layout.fillWidth: true
+                                    label: "Фамилия"
+                                    required: true
+                                    placeholder: "Иванов"
+                                    error: page.lastNameError
+                                    onTextChanged: page.lastNameError = ""
+                                }
+
+                                AppTextField {
+                                    id: firstNameField
+                                    Layout.fillWidth: true
+                                    label: "Имя"
+                                    required: true
+                                    placeholder: "Иван"
+                                    error: page.firstNameError
+                                    onTextChanged: page.firstNameError = ""
+                                }
                             }
 
-                            // Кастомный ComboBox для званий
-                            Rectangle {
-                                id: rankComboBox
+                            RowLayout {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 45
-                                radius: 8
-                                border.color: "#7d98ab"
-                                border.width: 1
-                                color: "white"
+                                spacing: 12
 
-                                property var model: [
-                                    "Капитан внутренней службы",
-                                    "Старший лейтенант внутренней службы",
-                                    "Лейтенант внутренней службы",
-                                    "Младший лейтенант внутренней службы",
-                                    "Майор внутренней службы",
-                                    "Подполковник внутренней службы",
-                                    "Полковник внутренней службы",
-                                    "Генерал-майор внутренней службы",
-                                    "Генерал-лейтенант внутренней службы",
-                                    "Генерал-полковник внутренней службы",
-                                    "Генерал внутренней службы Российской Федерации"
-                                ]
-                                property int currentIndex: 0
-                                property string currentText: model[currentIndex]
-
-                                Text {
-                                    id: rankComboDisplayText
-                                    anchors {
-                                        left: parent.left
-                                        leftMargin: 12
-                                        right: dropdownArrow.left
-                                        rightMargin: 10
-                                        verticalCenter: parent.verticalCenter
-                                    }
-                                    text: rankComboBox.currentText
-                                    color: colorTextDark
-                                    font.pixelSize: 14
-                                    elide: Text.ElideRight
+                                AppTextField {
+                                    id: patronymicField
+                                    Layout.fillWidth: true
+                                    label: "Отчество"
+                                    placeholder: "Иванович"
                                 }
 
-                                Rectangle {
-                                    id: dropdownArrow
-                                    width: 30
-                                    height: 30
-                                    radius: 4
-                                    color: colorSecondary
-                                    anchors {
-                                        right: parent.right
-                                        rightMargin: 8
-                                        verticalCenter: parent.verticalCenter
-                                    }
+                                DateField {
+                                    id: birthDateField
+                                    Layout.fillWidth: true
+                                    label: "Дата рождения"
+                                    error: page.birthError
+                                    onEdited: page.birthError = ""
+                                }
+                            }
 
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "▼"
-                                        color: colorTextLight
-                                        font.pixelSize: 12
-                                    }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 12
+
+                                AppTextField {
+                                    id: phoneField
+                                    Layout.fillWidth: true
+                                    label: "Телефон"
+                                    placeholder: "+7 999 123-45-67"
+                                    error: page.phoneError
+                                    inputMethodHints: Qt.ImhDialableCharactersOnly
+                                    onTextChanged: page.phoneError = ""
                                 }
 
-                                MouseArea {
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        // Вычисляем глобальную позицию комбобокса
-                                        var globalPos = mapToItem(registrationForm, 0, 0)
-                                        rankDropdown.targetPosition = Qt.point(globalPos.x, globalPos.y)
-                                        rankDropdown.visible = !rankDropdown.visible
-                                        positionDropdown.visible = false // Закрываем другой список
-                                    }
-                                    cursorShape: Qt.PointingHandCursor
+                                AppTextField {
+                                    id: emailField
+                                    Layout.fillWidth: true
+                                    label: "Электронная почта"
+                                    placeholder: "ivanov@example.com"
+                                    error: page.emailError
+                                    inputMethodHints: Qt.ImhEmailCharactersOnly
+                                    onTextChanged: page.emailError = ""
                                 }
                             }
                         }
 
-                        // Должность
-                        ColumnLayout {
-                            spacing: 5
+                        PhotoPicker {
+                            Layout.alignment: Qt.AlignTop
+                            previewWidth: 140
+                            previewHeight: 178
+                            photoUrl: page.pendingPhotoUrl
+                            onPhotoChosen: function(url) { page.pendingPhotoUrl = url }
+                            onPhotoRemoved: page.pendingPhotoUrl = ""
+                        }
+                    }
+                }
+
+                Card {
+                    Layout.fillWidth: true
+                    title: "Служебные данные"
+                    icon: "🎖"
+
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 2
+                        columnSpacing: 12
+                        rowSpacing: 10
+
+                        AppComboBox {
+                            id: categoryCombo
                             Layout.fillWidth: true
+                            label: "Категория звания"
+                            model: refData.rankCategories()
+                            onChosen: page.updateRankModel()
+                        }
 
-                            Text {
-                                text: "Должность:"
-                                color: colorTextDark
-                                font.pixelSize: 14
-                                font.bold: true
-                            }
+                        AppComboBox {
+                            id: rankCombo
+                            Layout.fillWidth: true
+                            label: "Специальное звание"
+                            required: true
+                            model: page.rankModel
+                            error: page.rankError
+                            onChosen: page.rankError = ""
+                        }
 
-                            // Кастомный ComboBox для должностей
-                            Rectangle {
-                                id: positionComboBox
+                        AppComboBox {
+                            id: positionCombo
+                            Layout.fillWidth: true
+                            Layout.columnSpan: 2
+                            label: "Должность"
+                            required: true
+                            model: page.positionModel
+                            error: page.positionError
+                            onChosen: page.positionError = ""
+                        }
+
+                        AppTextField {
+                            id: personnelField
+                            Layout.fillWidth: true
+                            label: "Табельный номер"
+                            placeholder: "Например, 000123"
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+
+                            DateField {
+                                id: hireDateField
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 45
-                                radius: 8
-                                border.color: "#7d98ab"
-                                border.width: 1
-                                color: "white"
+                                label: "Дата приёма на службу"
+                            }
 
-                                property var model: [
-                                    "Начальник отдела",
-                                    "Заместитель начальника отдела",
-                                    "Старший оперуполномоченный по особо важным делам",
-                                    "Оперуполномоченный по особо важным делам",
-                                    "Старший оперуполномоченный",
-                                    "Криминалист"
-                                ]
-                                property int currentIndex: 0
-                                property string currentText: model[currentIndex]
-
-                                Text {
-                                    id: positionComboDisplayText
-                                    anchors {
-                                        left: parent.left
-                                        leftMargin: 12
-                                        right: positionDropdownArrow.left
-                                        rightMargin: 10
-                                        verticalCenter: parent.verticalCenter
-                                    }
-                                    text: positionComboBox.currentText
-                                    color: colorTextDark
-                                    font.pixelSize: 14
-                                    elide: Text.ElideRight
-                                }
-
-                                Rectangle {
-                                    id: positionDropdownArrow
-                                    width: 30
-                                    height: 30
-                                    radius: 4
-                                    color: colorSecondary
-                                    anchors {
-                                        right: parent.right
-                                        rightMargin: 8
-                                        verticalCenter: parent.verticalCenter
-                                    }
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "▼"
-                                        color: colorTextLight
-                                        font.pixelSize: 12
-                                    }
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        // Вычисляем глобальную позицию комбобокса
-                                        var globalPos = mapToItem(registrationForm, 0, 0)
-                                        positionDropdown.targetPosition = Qt.point(globalPos.x, globalPos.y)
-                                        positionDropdown.visible = !positionDropdown.visible
-                                        rankDropdown.visible = false // Закрываем другой список
-                                    }
-                                    cursorShape: Qt.PointingHandCursor
-                                }
+                            AppTextField {
+                                id: experienceField
+                                Layout.fillWidth: true
+                                label: "Стаж, лет"
+                                placeholder: "0"
+                                validator: IntValidator { bottom: 0; top: 60 }
+                                inputMethodHints: Qt.ImhDigitsOnly
+                                maximumLength: 2
                             }
                         }
                     }
                 }
 
-                Text {
-                    id: errorText
-                    text: ""
-                    color: "#E74C3C"
-                    font.pixelSize: 14
-                    Layout.alignment: Qt.AlignHCenter
-                    visible: text !== ""
-                }
+                Card {
+                    Layout.fillWidth: true
+                    title: "Учётная запись"
+                    subtitle: "Пароль должен содержать не менее 8 символов, букву и цифру"
+                    icon: "🔐"
 
-                // Кнопки действий
-                RowLayout {
-                    Layout.alignment: Qt.AlignHCenter
-                    spacing: 20
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
 
-                    // Кнопка "Зарегистрироваться"
-                    Rectangle {
-                        width: 200
-                        height: 50
-                        radius: 8
-                        color: registerMa.pressed ? colorPressed : (registerMa.containsMouse ? colorHover : colorSecondary)
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Зарегистрироваться"
-                            color: colorTextLight
-                            font.pixelSize: 16
-                            font.bold: true
+                        AppTextField {
+                            id: loginField
+                            Layout.fillWidth: true
+                            label: "Логин"
+                            required: true
+                            placeholder: "ivanov.i"
+                            error: page.loginError
+                            hint: "Латиница, цифры, точка, дефис или подчёркивание"
+                            onTextChanged: page.loginError = ""
+                            onEditingFinished: page.checkLoginAvailable()
                         }
 
-                        MouseArea {
-                            id: registerMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: register()
-                            cursorShape: Qt.PointingHandCursor
+                        AppTextField {
+                            id: passwordField
+                            Layout.fillWidth: true
+                            label: "Пароль"
+                            required: true
+                            password: true
+                            placeholder: "Придумайте пароль"
+                            error: page.passwordError
+                            onTextChanged: page.passwordError = ""
                         }
                     }
 
-                    // Кнопка "Отмена"
-                    Rectangle {
-                        width: 120
-                        height: 50
-                        radius: 8
-                        color: cancelMa.pressed ? "#E74C3C" : (cancelMa.containsMouse ? "#EC7063" : "#C0392B")
+                    PasswordStrength {
+                        Layout.fillWidth: true
+                        password: passwordField.text
+                    }
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Отмена"
-                            color: colorTextLight
-                            font.pixelSize: 16
-                            font.bold: true
-                        }
-
-                        MouseArea {
-                            id: cancelMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: loginRequested()
-                            cursorShape: Qt.PointingHandCursor
-                        }
+                    AppTextField {
+                        id: confirmField
+                        Layout.fillWidth: true
+                        label: "Повторите пароль"
+                        required: true
+                        password: true
+                        placeholder: "Ещё раз"
+                        error: page.confirmError
+                        onTextChanged: page.confirmError = ""
+                        onAccepted: page.submit()
                     }
                 }
 
-                Text {
-                    text: "Уже есть аккаунт? <a href='login'>Войти</a>"
-                    font.pixelSize: 14
-                    color: colorTextDark
-                    Layout.alignment: Qt.AlignHCenter
-                    linkColor: colorSecondary
+                Rectangle {
+                    Layout.fillWidth: true
+                    visible: page.summaryError !== ""
+                    implicitHeight: summaryText.implicitHeight + 22
+                    radius: Theme.radiusSm
+                    color: Theme.dangerBg
+                    border.color: "#F3C9C9"
+                    border.width: 1
 
-                    MouseArea {
+                    Row {
                         anchors.fill: parent
-                        onClicked: loginRequested()
-                        cursorShape: Qt.PointingHandCursor
+                        anchors.margins: 11
+                        spacing: 8
+
+                        Text {
+                            text: "⚠"
+                            color: Theme.danger
+                            font.pixelSize: 14
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            id: summaryText
+                            width: parent.width - 24
+                            text: page.summaryError
+                            color: Theme.danger
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSmall
+                            wrapMode: Text.WordWrap
+                        }
                     }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    spacing: 10
+
+                    Item { Layout.fillWidth: true }
+
+                    AppButton {
+                        text: "Отмена"
+                        variant: "secondary"
+                        onClicked: page.loginRequested()
+                    }
+
+                    AppButton {
+                        text: "Зарегистрироваться"
+                        icon: "✓"
+                        loading: page.busy
+                        onClicked: page.submit()
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: 12
+                    text: "Регистрируясь, вы подтверждаете, что являетесь сотрудником органов внутренних дел и данные будут использоваться служебным порядком."
+                    color: Theme.textFaint
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontCaption
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
                 }
             }
         }
-    }
-
-    // Закрываем выпадающие списки при клике вне их области
-    MouseArea {
-        anchors.fill: parent
-        enabled: rankDropdown.visible || positionDropdown.visible
-        onClicked: {
-            rankDropdown.visible = false
-            positionDropdown.visible = false
-        }
-    }
-
-    function register() {
-        var lastName = lastNameField.text.trim()
-        var firstName = firstNameField.text.trim()
-        var login = loginField.text.trim()
-        var password = passwordField.text.trim()
-        var confirmPassword = confirmPasswordField.text.trim()
-
-        if (!lastName || !firstName || !login || !password) {
-            errorText.text = "Заполните обязательные поля"
-            return
-        }
-
-        if (password !== confirmPassword) {
-            errorText.text = "Пароли не совпадают"
-            return
-        }
-
-        if (password.length < 4) {
-            errorText.text = "Пароль должен быть не менее 4 символов"
-            return
-        }
-
-        var officerData = {
-            surname: lastName,
-            name: firstName,
-            patronymic: patronymicField.text.trim(),
-            rank: rankComboBox.currentText,
-            position: positionComboBox.currentText,
-            birth_date: birthDateField.text,
-            personnel_number: numberField.text,
-            experience: expField.text,
-            login: login,
-            password: password
-        }
-
-        // Регистрируем через C++
-        var success = dbManager.registerOfficer(officerData)
-
-        if (success) {
-            errorText.text = ""
-            registrationSuccessful()
-        } else {
-            errorText.text = "Ошибка регистрации. Возможно, логин уже занят."
-        }
-    }
-
-    function clearForm() {
-        lastNameField.text = ""
-        firstNameField.text = ""
-        patronymicField.text = ""
-        loginField.text = ""
-        passwordField.text = ""
-        confirmPasswordField.text = ""
-        rankComboBox.currentIndex = 0
-        positionComboBox.currentIndex = 0
-        errorText.text = ""
     }
 }

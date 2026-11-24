@@ -12,13 +12,13 @@ QrCodeItem::QrCodeItem(QQuickItem *parent)
     setSmooth(false);
 }
 
-void QrCodeItem::setData(const QString &data)
+void QrCodeItem::setQrData(const QString &data)
 {
-    if (m_data == data)
+    if (m_qrData == data)
         return;
-    m_data = data;
+    m_qrData = data;
     regenerate();
-    emit dataChanged();
+    emit qrDataChanged();
 }
 
 void QrCodeItem::setForeground(const QColor &color)
@@ -42,14 +42,14 @@ void QrCodeItem::setBackground(const QColor &color)
 void QrCodeItem::regenerate()
 {
     m_image = QImage();
-    if (m_data.trimmed().isEmpty()) {
+    if (m_qrData.trimmed().isEmpty()) {
         update();
         return;
     }
 
     try {
         const qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(
-            m_data.toUtf8().constData(), qrcodegen::QrCode::Ecc::MEDIUM);
+            m_qrData.toUtf8().constData(), qrcodegen::QrCode::Ecc::MEDIUM);
         const int modules = qr.getSize();
         const int quietZone = 4;
         const int scale = 8;

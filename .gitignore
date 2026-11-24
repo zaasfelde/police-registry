@@ -63,6 +63,7 @@ cmake-build-*/
 *.sqlite
 *.sqlite3
 
-# Временные данные self-test
+# Р’СЂРµРјРµРЅРЅС‹Рµ РґР°РЅРЅС‹Рµ С‚РµСЃС‚РѕРІ
 .selftest-data/
-
+.ui-smoke/
+ui-smoke/

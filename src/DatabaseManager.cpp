@@ -90,8 +90,30 @@ QString DatabaseManager::databasePath() const
 bool DatabaseManager::initDatabase()
 {
     if (m_databasePath.isEmpty()) {
-        const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-        m_databasePath = dataDir + QStringLiteral("/policedepartment.db");
+        // Основное место — общий каталог данных приложения. Если он
+        // недоступен (например, запуск из защищённой папки), пробуем
+        // резервные варианты, чтобы приложение оставалось рабочим.
+        QStringList candidates;
+        const QString genericData = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+        if (!genericData.isEmpty())
+            candidates << genericData + QStringLiteral("/PoliceRegistry");
+        candidates << QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        candidates << QDir::currentPath() + QStringLiteral("/data");
+        candidates << QStandardPaths::writableLocation(QStandardPaths::TempLocation) + QStringLiteral("/PoliceRegistry");
+
+        for (const QString &dir : candidates) {
+            if (dir.isEmpty())
+                continue;
+            if (QDir().mkpath(dir)) {
+                m_databasePath = dir + QStringLiteral("/policedepartment.db");
+                break;
+            }
+        }
+
+        if (m_databasePath.isEmpty()) {
+            qWarning() << "Не удалось найти каталог для базы данных";
+            return false;
+        }
     }
 
     const QFileInfo dbInfo(m_databasePath);
@@ -601,7 +623,10 @@ QString DatabaseManager::photoUrlForFile(const QString &fileName) const
     const QFileInfo file(photoDirectory() + QLatin1Char('/') + safeName);
     if (!file.exists() || !file.isFile())
         return {};
-    return QUrl::fromLocalFile(file.absoluteFilePath()).toString(QUrl::FullyEncoded);
+    // Версия в пути сбрасывает кэш QML после замены фотографии.
+    return QStringLiteral("image://photo/%1/%2")
+        .arg(file.lastModified().toMSecsSinceEpoch())
+        .arg(safeName);
 }
 
 bool DatabaseManager::deletePhotoFile(const QString &fileName)
