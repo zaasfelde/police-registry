@@ -34,10 +34,10 @@ ApplicationWindow {
             id: viewLoader
             anchors.fill: parent
             source: {
-                if (currentView === "login") return "LoginForm.qml"
-                else if (currentView === "register") return "RegistrationForm.qml"
-                else if (currentView === "main") return "MainApp.qml"
-                else return "LoginForm.qml"
+                if (currentView === "login") return "pages/LoginForm.qml"
+                else if (currentView === "register") return "pages/RegistrationForm.qml"
+                else if (currentView === "main") return "pages/MainApp.qml"
+                else return "pages/LoginForm.qml"
             }
 
             onLoaded: {

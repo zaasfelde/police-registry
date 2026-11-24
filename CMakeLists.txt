@@ -1,50 +1,53 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.21)
 
-project(policedep VERSION 0.1 LANGUAGES CXX)
+project(policedep VERSION 1.0 LANGUAGES CXX)
 
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Sql)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick Sql Network)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
 qt_add_executable(apppolicedep
     main.cpp
-    DatabaseManager.cpp
 )
 
 qt_add_qml_module(apppolicedep
     URI policedep
     VERSION 1.0
     QML_FILES
-        pages/AddCaseForm.qml
-        pages/AddEvidenceForm.qml
-        pages/AddPersonForm.qml
-        pages/CaseListForm.qml
-        pages/EmployeeDetailsForm.qml
-        pages/EmployeeListForm.qml
-        pages/LoginForm.qml
-        pages/Main.qml
-        pages/MainApp.qml
-        pages/RegistrationForm.qml
+        qml/Main.qml
+        qml/pages/AddCaseForm.qml
+        qml/pages/AddEvidenceForm.qml
+        qml/pages/AddPersonForm.qml
+        qml/pages/CaseListForm.qml
+        qml/pages/EmployeeDetailsForm.qml
+        qml/pages/EmployeeListForm.qml
+        qml/pages/LoginForm.qml
+        qml/pages/MainApp.qml
+        qml/pages/PersonListForm.qml
+        qml/pages/RegistrationForm.qml
     SOURCES
-        DatabaseManager.h DatabaseManager.cpp
-        QML_FILES pages/PersonListForm.qml
+        src/DatabaseManager.h
+        src/DatabaseManager.cpp
 )
 
-# Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
-# If you are developing for iOS or macOS you should consider setting an
-# explicit, fixed bundle identifier manually though.
 set_target_properties(apppolicedep PROPERTIES
-#    MACOSX_BUNDLE_GUI_IDENTIFIER com.example.apppolicedep
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     MACOSX_BUNDLE TRUE
     WIN32_EXECUTABLE TRUE
 )
 
+target_compile_definitions(apppolicedep PRIVATE
+    APP_VERSION="${PROJECT_VERSION}"
+)
+
+target_include_directories(apppolicedep PRIVATE src)
+
 target_link_libraries(apppolicedep
-    PRIVATE Qt6::Quick Qt6::Qml Qt6::Core Qt6::Gui Qt6::Sql
+    PRIVATE Qt6::Quick Qt6::Qml Qt6::Core Qt6::Gui Qt6::Sql Qt6::Network
 )
 
 include(GNUInstallDirs)

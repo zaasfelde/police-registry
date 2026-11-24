@@ -16,8 +16,10 @@ class DatabaseManager : public QObject
     Q_OBJECT
 
 public:
-    explicit DatabaseManager(QObject *parent = nullptr);
+    explicit DatabaseManager(QObject *parent = nullptr, const QString &databasePath = QString());
     ~DatabaseManager();
+
+    Q_INVOKABLE QString databasePath() const;
 
     // Методы аутентификации
     Q_INVOKABLE bool registerOfficer(const QVariantMap &officerData);
@@ -54,6 +56,7 @@ private:
     bool createTables();
     QString hashPassword(const QString &password);
     QSqlDatabase m_database;
+    QString m_databasePath;
 };
 
 #endif // DATABASEMANAGER_H

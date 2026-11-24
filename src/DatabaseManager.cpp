@@ -1,7 +1,9 @@
 #include "DatabaseManager.h"
+#include <QFileInfo>
 
-DatabaseManager::DatabaseManager(QObject *parent)
+DatabaseManager::DatabaseManager(QObject *parent, const QString &databasePath)
     : QObject(parent)
+    , m_databasePath(databasePath)
 {
     if (!initDatabase()) {
         qDebug() << "Failed to initialize database";
@@ -15,18 +17,40 @@ DatabaseManager::~DatabaseManager()
     }
 }
 
+QString DatabaseManager::databasePath() const
+{
+    return m_databasePath;
+}
+
 bool DatabaseManager::initDatabase()
 {
+    if (m_databasePath.isEmpty()) {
+        const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        m_databasePath = dataDir + QStringLiteral("/policedepartment.db");
+    }
+
+    // База данных должна лежать в каталоге, доступном для записи (а не рядом
+    // с исполняемым файлом, куда при установке в Program Files писать нельзя).
+    const QFileInfo dbInfo(m_databasePath);
+    if (!QDir().mkpath(dbInfo.absolutePath())) {
+        qDebug() << "Error: cannot create database directory" << dbInfo.absolutePath();
+        return false;
+    }
+
     m_database = QSqlDatabase::addDatabase("QSQLITE");
-    m_database.setDatabaseName("policedepartment.db");
+    m_database.setDatabaseName(m_databasePath);
 
     if (!m_database.open()) {
         qDebug() << "Error: connection with database failed - " << m_database.lastError().text();
         return false;
     }
 
-    // qDebug() << "Database created at:" << QDir::currentPath() + "/policedepartment.db";
-    qDebug() << "Full database path:" << QFileInfo(m_database.databaseName()).absoluteFilePath();
+    QSqlQuery pragma;
+    pragma.exec(QStringLiteral("PRAGMA foreign_keys = ON"));
+    pragma.exec(QStringLiteral("PRAGMA journal_mode = WAL"));
+    pragma.exec(QStringLiteral("PRAGMA busy_timeout = 5000"));
+
+    qDebug() << "Database path:" << m_databasePath;
 
     return createTables();
 }
