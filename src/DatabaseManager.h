@@ -47,6 +47,8 @@ public:
     Q_INVOKABLE QVariantMap removeOfficer(int officerId);
     Q_INVOKABLE QVariantMap setOfficerApproval(int officerId, bool approved);
     Q_INVOKABLE QVariantMap setOfficerRole(int officerId, const QString &role);
+    Q_INVOKABLE QVariantMap resetOfficerPassword(int officerId);
+    Q_INVOKABLE QVariantMap resetOfficerTwoFactor(int officerId);
     Q_INVOKABLE bool isLoginFree(const QString &login, int exceptOfficerId = 0);
 
     // ---------- Личности ----------
@@ -117,6 +119,7 @@ public:
     static bool isValidPassword(const QString &password, QString *reason = nullptr);
     static bool isValidEmail(const QString &email);
     static bool isValidPhone(const QString &phone);
+    static QString generateTemporaryPassword();
 
     QString photoDirectory() const;
     QString writePhotoFile(const QString &prefix, int id, const QUrl &source, QString *error);

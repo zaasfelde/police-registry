@@ -293,6 +293,58 @@ Dialog {
                             }
                         }
                     }
+
+                    Card {
+                        Layout.fillWidth: true
+                        visible: root.canManage && !root.isSelf
+                        title: "Безопасность учётной записи"
+                        icon: "🔐"
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+
+                            Column {
+                                Layout.fillWidth: true
+                                spacing: 2
+
+                                Text {
+                                    width: parent.width
+                                    text: root.employee.totp_enabled
+                                          ? "Двухфакторная аутентификация включена"
+                                          : "Двухфакторная аутентификация не настроена"
+                                    color: Theme.text
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSmall
+                                    font.bold: true
+                                }
+
+                                Text {
+                                    width: parent.width
+                                    text: "Сброс пароля выдаёт временный пароль. Если сотрудник потерял и устройство 2FA, отключите второй фактор отдельно."
+                                    color: Theme.textMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontCaption
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+
+                            AppButton {
+                                text: "Сбросить пароль"
+                                variant: "secondary"
+                                small: true
+                                onClicked: resetPasswordDialog.open()
+                            }
+
+                            AppButton {
+                                visible: !!root.employee.totp_enabled
+                                text: "Отключить 2FA"
+                                variant: "ghost"
+                                small: true
+                                onClicked: resetTwoFactorDialog.open()
+                            }
+                        }
+                    }
                 }
 
                 // ---------- Редактирование ----------
@@ -530,6 +582,29 @@ Dialog {
         onConfirmed: root.removeEmployee()
     }
 
+    ConfirmDialog {
+        id: resetPasswordDialog
+        heading: "Сбросить пароль?"
+        message: "Текущий пароль сотрудника перестанет действовать. Будет создан временный пароль, который нужно передать лично."
+        confirmText: "Сбросить"
+        icon: "🔑"
+        onConfirmed: root.resetPassword()
+    }
+
+    ConfirmDialog {
+        id: resetTwoFactorDialog
+        heading: "Отключить 2FA сотруднику?"
+        message: "Вход будет защищён только паролем. Используйте, если сотрудник потерял устройство с приложением-аутентификатором."
+        confirmText: "Отключить 2FA"
+        icon: "🔐"
+        destructive: true
+        onConfirmed: root.resetTwoFactor()
+    }
+
+    RecoveryCodesDialog {
+        id: credentialsDialog
+    }
+
     function updateRankModel() {
         rankModel = ["Выберите звание"].concat(refData.ranks(editCategory.currentText))
     }
@@ -692,5 +767,29 @@ Dialog {
         App.notify("Сотрудник удалён", "success")
         root.changed()
         root.close()
+    }
+
+    function resetPassword() {
+        var result = dbManager.resetOfficerPassword(root.employeeId)
+        if (!result.ok) {
+            root.errorMessage = result.error || "Не удалось сбросить пароль"
+            return
+        }
+        credentialsDialog.showCodes(
+            [result.password],
+            "Временный пароль",
+            "Передайте пароль сотруднику лично. Сообщение с паролем не отправляется автоматически.",
+            "Пароль показан один раз. Попросите сотрудника сменить его после входа.")
+    }
+
+    function resetTwoFactor() {
+        var result = dbManager.resetOfficerTwoFactor(root.employeeId)
+        if (!result.ok) {
+            root.errorMessage = result.error || "Не удалось отключить 2FA"
+            return
+        }
+        root.reloadEmployee()
+        root.changed()
+        App.notify("Двухфакторная аутентификация сотрудника отключена", "warning")
     }
 }

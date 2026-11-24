@@ -10,6 +10,10 @@ Dialog {
     id: root
 
     property var codes: []
+    property string heading: "Резервные коды"
+    property string description: "Сохраните коды в безопасном месте. Каждый код можно использовать один раз, если телефон с приложением недоступен."
+    property string warning: "Коды больше не будут показаны."
+    property string confirmText: "Я сохранил коды"
 
     modal: true
     focus: true
@@ -32,7 +36,7 @@ Dialog {
 
         Text {
             Layout.fillWidth: true
-            text: "Резервные коды"
+            text: root.heading
             color: Theme.text
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontTitle
@@ -41,7 +45,7 @@ Dialog {
 
         Text {
             Layout.fillWidth: true
-            text: "Сохраните коды в безопасном месте. Каждый код можно использовать один раз, если телефон с приложением недоступен."
+            text: root.description
             color: Theme.textMuted
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSmall
@@ -80,7 +84,7 @@ Dialog {
 
         Text {
             Layout.fillWidth: true
-            text: "Коды больше не будут показаны."
+            text: root.warning
             color: Theme.danger
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontCaption
@@ -94,13 +98,19 @@ Dialog {
         AppButton {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            text: "Я сохранил коды"
+            text: root.confirmText
             onClicked: root.close()
         }
     }
 
-    function showCodes(list) {
+    function showCodes(list, titleText, descriptionText, warningText) {
         codes = list || []
+        if (titleText)
+            heading = titleText
+        if (descriptionText)
+            description = descriptionText
+        if (warningText)
+            warning = warningText
         open()
     }
 }

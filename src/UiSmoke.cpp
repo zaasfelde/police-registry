@@ -291,7 +291,7 @@ int runUiSmoke(DatabaseManager &db, QQmlApplicationEngine &engine)
             QMetaObject::invokeMethod(app, "navigate", Q_ARG(QString, QStringLiteral("employees")));
             QMetaObject::invokeMethod(app, "openEntity",
                                       Q_ARG(QString, QStringLiteral("officer")),
-                                      Q_ARG(int, adminId));
+                                      Q_ARG(int, officerId));
             QTimer::singleShot(900, [screenshot]() { screenshot(QStringLiteral("08-employee-dialog")); });
             ++step;
             return;

@@ -584,6 +584,22 @@ bool DatabaseManager::isValidPhone(const QString &phone)
     return digits >= 10 && digits <= 15;
 }
 
+QString DatabaseManager::generateTemporaryPassword()
+{
+    static const QString alphabet = QStringLiteral(
+        "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789");
+    auto *generator = QRandomGenerator::system();
+
+    QString password;
+    password.reserve(12);
+    for (int i = 0; i < 11; ++i)
+        password.append(alphabet.at(generator->bounded(alphabet.size())));
+
+    // Гарантируем цифру, чтобы пароль проходил валидацию.
+    password.insert(4, QLatin1Char(static_cast<char>('2' + generator->bounded(8))));
+    return password.left(12);
+}
+
 int DatabaseManager::countAdmins(int exceptOfficerId) const
 {
     QSqlQuery query(m_database);
@@ -1577,6 +1593,61 @@ QVariantMap DatabaseManager::setOfficerRole(int officerId, const QString &role)
     update.bindValue(QStringLiteral(":id"), officerId);
     if (!update.exec())
         return errorResult(QStringLiteral("Не удалось изменить роль"));
+    return successResult();
+}
+
+QVariantMap DatabaseManager::resetOfficerPassword(int officerId)
+{
+    const QVariantMap auth = requireAdmin();
+    if (!auth.value(QStringLiteral("ok")).toBool())
+        return auth;
+    if (officerId == m_currentOfficerId)
+        return errorResult(QStringLiteral("Для своей учётной записи используйте смену пароля в профиле"));
+
+    const QVariantMap target = userMap(officerId);
+    if (target.isEmpty())
+        return errorResult(QStringLiteral("Сотрудник не найден"));
+
+    const QString temporaryPassword = generateTemporaryPassword();
+    QSqlQuery update(m_database);
+    update.prepare(QStringLiteral(
+        "UPDATE officers SET password_hash = :hash, failed_attempts = 0, locked_until = NULL, "
+        "updated_at = :updated WHERE officer_id = :id"));
+    update.bindValue(QStringLiteral(":hash"), hashPassword(temporaryPassword));
+    update.bindValue(QStringLiteral(":updated"), nowIso());
+    update.bindValue(QStringLiteral(":id"), officerId);
+    if (!update.exec())
+        return errorResult(QStringLiteral("Не удалось сбросить пароль"));
+
+    return { { QStringLiteral("ok"), true },
+             { QStringLiteral("password"), temporaryPassword } };
+}
+
+QVariantMap DatabaseManager::resetOfficerTwoFactor(int officerId)
+{
+    const QVariantMap auth = requireAdmin();
+    if (!auth.value(QStringLiteral("ok")).toBool())
+        return auth;
+    if (officerId == m_currentOfficerId)
+        return errorResult(QStringLiteral("Для своей учётной записи используйте раздел «Мой профиль»"));
+
+    const QVariantMap target = userMap(officerId);
+    if (target.isEmpty())
+        return errorResult(QStringLiteral("Сотрудник не найден"));
+
+    QSqlQuery update(m_database);
+    update.prepare(QStringLiteral(
+        "UPDATE officers SET totp_secret = NULL, totp_enabled = 0, updated_at = :updated WHERE officer_id = :id"));
+    update.bindValue(QStringLiteral(":updated"), nowIso());
+    update.bindValue(QStringLiteral(":id"), officerId);
+    if (!update.exec())
+        return errorResult(QStringLiteral("Не удалось отключить 2FA"));
+
+    QSqlQuery clear(m_database);
+    clear.prepare(QStringLiteral("DELETE FROM recovery_codes WHERE officer_id = :id"));
+    clear.bindValue(QStringLiteral(":id"), officerId);
+    clear.exec();
+
     return successResult();
 }
 

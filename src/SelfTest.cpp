@@ -209,6 +209,24 @@ int runSelfTest()
         db.logout();
         check(db.authenticate(QStringLiteral("petrov"), QStringLiteral("Petrov12345")).value(QStringLiteral("ok")).toBool(),
               QStringLiteral("подтверждённый сотрудник входит"));
+        check(!db.resetOfficerPassword(adminId).value(QStringLiteral("ok")).toBool(),
+              QStringLiteral("сотрудник не может сбросить чужой пароль"));
+
+        db.logout();
+        db.authenticate(QStringLiteral("admin"), QStringLiteral("NewPassword123"));
+        db.verifyTwoFactor(TotpAuth::codeFor(rawSecret, QDateTime::currentSecsSinceEpoch()));
+        const QVariantMap resetPassword = db.resetOfficerPassword(secondId);
+        check(resetPassword.value(QStringLiteral("ok")).toBool()
+                  && resetPassword.value(QStringLiteral("password")).toString().size() >= 8,
+              QStringLiteral("администратор сбрасывает пароль сотрудника"));
+        check(db.resetOfficerTwoFactor(secondId).value(QStringLiteral("ok")).toBool(),
+              QStringLiteral("администратор отключает 2FA сотрудника"));
+
+        const QString temporaryPassword = resetPassword.value(QStringLiteral("password")).toString();
+        db.logout();
+        check(db.authenticate(QStringLiteral("petrov"), temporaryPassword).value(QStringLiteral("ok")).toBool(),
+              QStringLiteral("вход по временному паролю"));
+
         db.logout();
         db.authenticate(QStringLiteral("admin"), QStringLiteral("NewPassword123"));
         db.verifyTwoFactor(TotpAuth::codeFor(rawSecret, QDateTime::currentSecsSinceEpoch()));
